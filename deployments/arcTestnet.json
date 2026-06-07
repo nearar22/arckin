@@ -1,0 +1,12 @@
+{
+  "network": "arcTestnet",
+  "chainId": 5042002,
+  "rpcUrl": "https://rpc.testnet.arc.network",
+  "explorer": "https://testnet.arcscan.app",
+  "contracts": {
+    "DeadMansSwitch": "0xFbb08c350aEc695fC55f1d4C0D945A4147a1915e"
+  },
+  "tokens": {
+    "USDC": "0x3600000000000000000000000000000000000000"
+  }
+}
