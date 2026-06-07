@@ -13,6 +13,7 @@ import { WagmiProvider } from "wagmi";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { wagmiConfig } from "../lib/web3/wagmi";
+import { Toaster } from "../components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -98,6 +99,7 @@ function RootComponent() {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <Outlet />
+        <Toaster position="top-center" richColors closeButton />
       </QueryClientProvider>
     </WagmiProvider>
   );

@@ -1,8 +1,8 @@
 import { fmtMoney, type Switch } from "@/lib/types";
 import { Gift } from "lucide-react";
-import { useState } from "react";
 import { useAccount } from "wagmi";
 import { useSwitchActions } from "@/lib/web3/actions";
+import { toast } from "sonner";
 
 function short(a: string) {
   if (a.startsWith("0x") && a.length > 14) return `${a.slice(0, 6)}…${a.slice(-4)}`;
@@ -20,14 +20,18 @@ export function HeirCard({ s }: { s: Switch }) {
   const tripped = s.status === "Tripped";
   const { release, isPending } = useSwitchActions();
   const { isConnected } = useAccount();
-  const [msg, setMsg] = useState<string | null>(null);
 
   async function claim() {
-    setMsg(null);
+    const t = toast.loading("Claiming inheritance…");
     try {
       await release(s.id);
+      toast.success("Inheritance claimed.", {
+        id: t,
+        description: "Funds have been distributed to the beneficiaries.",
+      });
     } catch (e: any) {
-      setMsg(e?.shortMessage || e?.message || "Claim failed.");
+      const reason = e?.shortMessage || e?.message || "Claim failed.";
+      toast.error("Could not claim", { id: t, description: reason });
     }
   }
   return (
@@ -63,7 +67,6 @@ export function HeirCard({ s }: { s: Switch }) {
       >
         <Gift className="h-4 w-4" /> {isPending ? "Claiming…" : "Claim inheritance"}
       </button>
-      {msg && <div className="mt-2 text-xs text-rust">{msg}</div>}
     </article>
   );
 }

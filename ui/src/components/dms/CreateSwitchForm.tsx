@@ -1,11 +1,23 @@
 import { useMemo, useState } from "react";
 import { Plus, Trash2, Check } from "lucide-react";
 import type { Currency } from "@/lib/types";
-import { isAddress } from "viem";
-import { useAccount } from "wagmi";
+import { isAddress, formatUnits } from "viem";
+import { useAccount, useReadContract } from "wagmi";
 import { useSwitchActions } from "@/lib/web3/actions";
+import { TOKENS } from "@/lib/web3/chain";
+import { toast } from "sonner";
 
 interface Row { account: string; shares: string }
+
+const balanceAbi = [
+  {
+    type: "function",
+    name: "balanceOf",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
 
 const intervals = [
   { label: "1 minute", value: 60 },
@@ -31,17 +43,47 @@ export function CreateSwitchForm() {
   );
   const valid = total === 100;
 
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const { createSwitch, isPending } = useSwitchActions();
   const [msg, setMsg] = useState<string | null>(null);
 
+  // Live balance of the selected token for the connected wallet.
+  const { data: balanceRaw } = useReadContract({
+    address: TOKENS[currency].address,
+    abi: balanceAbi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+  const balance = balanceRaw !== undefined
+    ? Number(formatUnits(balanceRaw as bigint, TOKENS[currency].decimals))
+    : undefined;
+  const insufficient =
+    balance !== undefined && Number(amount) > balance;
+
   async function handleCreate() {
     setMsg(null);
-    if (!isConnected) return setMsg("Connect your wallet first.");
-    if (!valid) return setMsg("Shares must total 100%.");
-    for (const r of rows) {
-      if (!isAddress(r.account)) return setMsg(`Invalid address: ${r.account || "(empty)"}`);
+    if (!isConnected) {
+      toast.error("Connect your wallet first.");
+      return;
     }
+    if (!valid) {
+      toast.error("Shares must total 100%.");
+      return;
+    }
+    if (insufficient) {
+      toast.error("Not enough balance", {
+        description: `You have ${balance?.toLocaleString()} ${currency}, but tried to lock ${amount}.`,
+      });
+      return;
+    }
+    for (const r of rows) {
+      if (!isAddress(r.account)) {
+        toast.error("Invalid beneficiary address", { description: r.account || "(empty)" });
+        return;
+      }
+    }
+    const t = toast.loading("Confirm the two transactions in your wallet…");
     try {
       await createSwitch(
         currency,
@@ -49,9 +91,15 @@ export function CreateSwitchForm() {
         interval,
         rows.map((r) => ({ account: r.account as `0x${string}`, sharesPct: Number(r.shares) }))
       );
-      setMsg("Switch created! It will appear in your vaults shortly.");
+      toast.success("Switch created!", {
+        id: t,
+        description: `${amount} ${currency} locked. It will appear in your vaults shortly.`,
+      });
+      setMsg(null);
     } catch (e: any) {
-      setMsg(e?.shortMessage || e?.message || "Transaction failed.");
+      const reason = e?.shortMessage || e?.message || "Transaction failed.";
+      toast.error("Could not create switch", { id: t, description: reason });
+      setMsg(null);
     }
   }
 
@@ -84,6 +132,12 @@ export function CreateSwitchForm() {
               ))}
             </div>
           </div>
+          {balance !== undefined && (
+            <div className={`mt-1.5 text-xs ${insufficient ? "text-rust" : "text-muted-foreground"}`}>
+              Balance: {balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} {currency}
+              {insufficient && " · not enough to lock this amount"}
+            </div>
+          )}
         </div>
 
         <div>
@@ -159,12 +213,12 @@ export function CreateSwitchForm() {
 
       <div className="mt-7 flex flex-wrap items-center gap-3">
         <button
-          disabled={!valid || !isConnected || isPending}
+          disabled={!valid || !isConnected || isPending || insufficient}
           onClick={handleCreate}
           className="lift lift-hover inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Check className="h-4 w-4" />
-          {isPending ? "Confirming…" : "Approve & create switch"}
+          {isPending ? "Confirming…" : insufficient ? "Insufficient balance" : "Approve & create switch"}
         </button>
         {!isConnected && (
           <span className="text-xs text-muted-foreground">Connect your wallet to create.</span>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { fmtCountdown, fmtMoney, intervalLabel, type Switch } from "@/lib/types";
 import { useSwitchActions } from "@/lib/web3/actions";
 import { useAccount } from "wagmi";
+import { toast } from "sonner";
 import { Heart, Send, TrendingUp, MinusCircle, Users } from "lucide-react";
 
 function statusColor(status: Switch["status"]) {
@@ -34,12 +35,18 @@ export function SwitchCard({ s }: { s: Switch }) {
   const [amount, setAmount] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
-  async function run(fn: () => Promise<unknown>) {
+  async function run(
+    fn: () => Promise<unknown>,
+    msgs: { loading: string; success: string }
+  ) {
     setMsg(null);
+    const t = toast.loading(msgs.loading);
     try {
       await fn();
+      toast.success(msgs.success, { id: t });
     } catch (e: any) {
-      setMsg(e?.shortMessage || e?.message || "Transaction failed.");
+      const reason = e?.shortMessage || e?.message || "Transaction failed.";
+      toast.error("Transaction failed", { id: t, description: reason });
     }
   }
 
@@ -107,7 +114,12 @@ export function SwitchCard({ s }: { s: Switch }) {
         {s.status === "Active" ? (
           <button
             disabled={!isConnected || isPending}
-            onClick={() => run(() => checkIn(s.id))}
+            onClick={() =>
+              run(() => checkIn(s.id), {
+                loading: "Confirming check-in…",
+                success: "Checked in. You're alive — countdown reset.",
+              })
+            }
             className="lift lift-hover inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
           >
             <Heart className="h-3.5 w-3.5" /> {isPending ? "Confirming…" : "I'm alive"}
@@ -115,7 +127,12 @@ export function SwitchCard({ s }: { s: Switch }) {
         ) : s.status === "Tripped" ? (
           <button
             disabled={!isConnected || isPending}
-            onClick={() => run(() => release(s.id))}
+            onClick={() =>
+              run(() => release(s.id), {
+                loading: "Releasing to beneficiaries…",
+                success: "Released. Funds sent to the heirs.",
+              })
+            }
             className="lift lift-hover inline-flex items-center gap-1.5 rounded-full bg-rust px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
             <Send className="h-3.5 w-3.5" /> {isPending ? "Releasing…" : "Release to heirs"}
@@ -160,10 +177,20 @@ export function SwitchCard({ s }: { s: Switch }) {
                 <button
                   disabled={!isConnected || isPending || !amount}
                   onClick={() =>
-                    run(() =>
+                    run(
+                      () =>
+                        tab === "add"
+                          ? deposit(s.id, amount, s.currency)
+                          : withdraw(s.id, amount, s.currency),
                       tab === "add"
-                        ? deposit(s.id, amount, s.currency)
-                        : withdraw(s.id, amount, s.currency)
+                        ? {
+                            loading: `Depositing ${amount} ${s.currency}…`,
+                            success: `Deposited ${amount} ${s.currency}.`,
+                          }
+                        : {
+                            loading: `Withdrawing ${amount} ${s.currency}…`,
+                            success: `Withdrew ${amount} ${s.currency}.`,
+                          }
                     ).then(() => setAmount(""))
                   }
                   className="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
